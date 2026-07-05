@@ -1,7 +1,7 @@
 {
   "name": "any-forge",
   "private": true,
-  "version": "0.1.1",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "pnpm build && python3 -m http.server 1420 -d dist",

@@ -105,7 +105,7 @@ const compressionLevelEl = $("#compression-level-input");
 const webpPresetEl = $("#webp-preset");
 const webpOptionsEl = $("#webp-options");
 const formatToggleEl = $("#format-toggle");
-const formatLabelEl = $("#format-label");
+const formatImageEl = $("#format-image");
 const chooseFolderEl = $("#choose-folder");
 const convertButtonEl = $("#convert-button");
 const locateButtonEl = $("#locate-button");
@@ -276,7 +276,10 @@ function updateOutputFormatUi() {
     const isWebp = outputFormat === "webp";
     const staticInput = pendingStaticInput;
     formatToggleEl.dataset.format = outputFormat;
-    formatLabelEl.textContent = outputLabel();
+    formatImageEl.src = outputFormat === "webp"
+        ? formatImageEl.dataset.webpSrc
+        : formatImageEl.dataset.gifSrc;
+    formatImageEl.alt = `any to ${outputFormat}`;
     webpOptionsEl.classList.toggle("is-disabled", !isWebp);
     fpsEl.disabled = staticInput;
     loopEl.disabled = !isWebp || staticInput;

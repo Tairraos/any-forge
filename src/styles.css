@@ -68,39 +68,30 @@ select {
 .side-panel header {
   width: 130px;
   text-align: right;
-  transform: translateY(20px);
+  transform: translateY(9px);
 }
 
 .format-toggle {
   width: 130px;
-  height: 54px;
-  padding: 6px 8px;
-  display: grid;
-  place-items: center;
-  gap: 1px;
-  color: #16181d;
-  background: #ffffff;
-  border: 1px solid #cfd5df;
-  box-shadow: 0 3px 9px rgba(22, 24, 29, 0.08);
-  text-transform: uppercase;
+  height: 65px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: block;
+  cursor: pointer;
 }
 
 .format-toggle:hover {
-  color: #ffffff;
-  background: #0f766e;
+  background: transparent;
 }
 
-.format-toggle span {
-  color: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.format-toggle strong {
-  font-size: 22px;
-  line-height: 1;
-  letter-spacing: 0;
+.format-toggle img {
+  display: block;
+  width: 130px;
+  height: 65px;
+  object-fit: contain;
 }
 
 .eyebrow {

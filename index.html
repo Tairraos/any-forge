@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AnyForge 0.1.1</title>
+    <title>AnyForge 1.0.1</title>
     <script type="module" src="/src/main.js" defer></script>
   </head>
 
@@ -41,8 +41,13 @@
               type="button"
               aria-label="切换输出格式"
             >
-              <span>any to</span>
-              <strong id="format-label">WEBP</strong>
+              <img
+                id="format-image"
+                src="/src/webp.png"
+                data-gif-src="/src/gif.png"
+                data-webp-src="/src/webp.png"
+                alt="any to webp"
+              />
             </button>
           </header>
           <output id="status" class="status">准备就绪</output>
