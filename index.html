@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AnyForge 0.1.0</title>
+    <script type="module" src="/src/main.js" defer></script>
+  </head>
+
+  <body>
+    <main class="app-shell">
+      <section class="hero-row">
+        <section id="dropzone" class="dropzone" aria-label="拖入媒体文件">
+          <div id="preview-badge" class="preview-badge" hidden></div>
+          <video id="preview-video" playsinline muted loop hidden></video>
+          <img id="preview-image" alt="媒体预览" hidden />
+          <div id="preview-empty" class="preview-empty">
+            <svg
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+            >
+              <path
+                fill="currentColor"
+                d="m4 4l1.625 3.25q.175.35.5.55t.7.2q.75 0 1.15-.638t.05-1.312L7 4h2l1.625 3.25q.175.35.5.55t.7.2q.75 0 1.15-.638t.05-1.312L12 4h2l1.625 3.25q.175.35.5.55t.7.2q.75 0 1.15-.638t.05-1.312L17 4h3q.825 0 1.413.587T22 6v12q0 .825-.587 1.413T20 20H4q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4m0 6v8h16v-8zm0 0v8z"
+              />
+            </svg>
+            <strong>拖入媒体文件</strong>
+            <span id="file-name">等待文件</span>
+          </div>
+        </section>
+
+        <aside class="side-panel">
+          <header>
+            <button
+              id="format-toggle"
+              class="format-toggle"
+              type="button"
+              aria-label="切换输出格式"
+            >
+              <span>any to</span>
+              <strong id="format-label">WEBP</strong>
+            </button>
+          </header>
+          <output id="status" class="status">准备就绪</output>
+          <button id="locate-button" class="locate-button" type="button" disabled>
+            定位
+          </button>
+
+          <button id="convert-button" class="convert-button" type="button" disabled>
+            <svg
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+            >
+              <path
+                fill="currentColor"
+                d="M8 17.175V6.825q0-.425.3-.713t.7-.287q.125 0 .263.037t.262.113l8.15 5.175q.225.15.338.375t.112.475t-.112.475t-.338.375l-8.15 5.175q-.125.075-.262.113T9 18.175q-.4 0-.7-.288t-.3-.712"
+              />
+            </svg>
+            转换
+          </button>
+        </aside>
+      </section>
+
+      <section class="controls" aria-label="导出设置">
+        <div class="size-row">
+          <label>
+            <span>尺寸</span>
+            <select id="size-preset"></select>
+          </label>
+          <label>
+            <span>宽</span>
+            <input
+              id="width-input"
+              type="number"
+              min="5"
+              step="5"
+              inputmode="numeric"
+            />
+          </label>
+          <label>
+            <span>高</span>
+            <input
+              id="height-input"
+              type="number"
+              min="5"
+              step="5"
+              inputmode="numeric"
+            />
+          </label>
+          <label>
+            <span>FPS</span>
+            <input
+              id="fps-input"
+              type="number"
+              min="10"
+              max="30"
+              step="1"
+              inputmode="numeric"
+            />
+          </label>
+        </div>
+
+        <div class="folder-row">
+          <div id="webp-options" class="webp-row">
+            <label class="checkbox-field">
+              <span>循环</span>
+              <span class="checkbox-box">
+                <input id="loop-input" type="checkbox" />
+              </span>
+            </label>
+            <label class="checkbox-field">
+              <span>有损</span>
+              <span class="checkbox-box">
+                <input id="lossy-input" type="checkbox" />
+              </span>
+            </label>
+            <label>
+              <span>质量</span>
+              <input
+                id="quality-input"
+                type="number"
+                min="50"
+                max="100"
+                step="5"
+                inputmode="numeric"
+              />
+            </label>
+            <label>
+              <span>压缩率</span>
+              <input
+                id="compression-level-input"
+                type="number"
+                min="0"
+                max="6"
+                step="1"
+                inputmode="numeric"
+              />
+            </label>
+            <label>
+              <span>预设</span>
+              <select id="webp-preset">
+                <option value="picture">picture</option>
+                <option value="photo">photo</option>
+                <option value="icon">icon</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="folder-row">
+          <label>
+            <span>保存文件夹</span>
+            <div class="folder-field">
+              <input id="output-dir-input" type="text" />
+              <button id="choose-folder" type="button" aria-label="选择文件夹">
+                <svg
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h5.175q.4 0 .763.15t.637.425L12 6h9q.425 0 .713.288T22 7t-.288.713T21 8h-9.825l-2-2H4v12l1.975-6.575q.2-.65.738-1.037T7.9 10h12.9q1.025 0 1.613.813t.312 1.762l-1.8 6q-.2.65-.737 1.038T19 20zm2.1-2H19l1.8-6H7.9zM4 11.45V6zM6.1 18l1.8-6z"
+                  />
+                </svg>
+              </button>
+            </div>
+          </label>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
