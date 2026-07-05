@@ -26,6 +26,7 @@ struct MediaInfo {
     height: u64,
     fps: f64,
     duration: f64,
+    is_static_image: bool,
 }
 
 #[tauri::command]
@@ -74,15 +75,18 @@ fn convert_file_blocking(
     compression_level: u32,
     preset: String,
 ) -> Result<ConvertResult, String> {
-    validate_common_options(width, height, fps)?;
     let output_format = normalize_output_format(&output_format)?;
     let input = PathBuf::from(input_path);
     if !input.is_file() {
         return Err("找不到这个输入文件".into());
     }
+    let static_input = is_static_image_path(&input);
+    validate_common_options(width, height, fps, static_input)?;
 
     match output_format {
-        OutputFormat::Gif => convert_to_gif_blocking(&input, width, height, output_dir, fps),
+        OutputFormat::Gif => {
+            convert_to_gif_blocking(&input, width, height, output_dir, fps, static_input)
+        }
         OutputFormat::Webp => convert_to_webp_blocking(
             &input,
             width,
@@ -94,6 +98,7 @@ fn convert_file_blocking(
             quality,
             compression_level,
             preset,
+            static_input,
         ),
     }
 }
@@ -104,10 +109,35 @@ fn convert_to_gif_blocking(
     height: u32,
     output_dir: Option<String>,
     fps: u32,
+    static_input: bool,
 ) -> Result<ConvertResult, String> {
     let output = next_output_path(input, output_dir.as_deref(), width, height, OutputFormat::Gif)?;
-    let palette = palette_path();
     let ffmpeg = ffmpeg_bin();
+
+    if static_input {
+        let filter = format!("scale={width}:{height}:flags=lanczos");
+        let gif_result = Command::new(&ffmpeg)
+            .args(["-hide_banner", "-n"])
+            .arg("-i")
+            .arg(input)
+            .arg("-an")
+            .arg("-vf")
+            .arg(&filter)
+            .arg("-frames:v")
+            .arg("1")
+            .arg(&output)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| format!("无法启动 ffmpeg: {error}"))?;
+
+        if !gif_result.status.success() {
+            return Err(ffmpeg_error("导出 GIF 失败", &gif_result));
+        }
+
+        return output_result(output, "GIF");
+    }
+
+    let palette = palette_path();
     let palette_filter = format!("fps={fps},scale={width}:{height}:flags=lanczos,palettegen");
     let gif_filter =
         format!("[0:v]fps={fps},scale={width}:{height}:flags=lanczos[x];[x][1:v]paletteuse");
@@ -163,6 +193,7 @@ fn convert_to_webp_blocking(
     quality: u32,
     compression_level: u32,
     preset: String,
+    static_input: bool,
 ) -> Result<ConvertResult, String> {
     if !(50..=100).contains(&quality) {
         return Err("有损质量需要在 50 到 100 之间".into());
@@ -174,7 +205,11 @@ fn convert_to_webp_blocking(
 
     let output = next_output_path(input, output_dir.as_deref(), width, height, OutputFormat::Webp)?;
     let ffmpeg = ffmpeg_bin();
-    let filter = format!("fps={fps},scale={width}:{height}:flags=lanczos");
+    let filter = if static_input {
+        format!("scale={width}:{height}:flags=lanczos")
+    } else {
+        format!("fps={fps},scale={width}:{height}:flags=lanczos")
+    };
     let loop_count = if loop_animation { "0" } else { "1" };
     let lossless = if lossy { "0" } else { "1" };
     let mut command = Command::new(&ffmpeg);
@@ -184,9 +219,17 @@ fn convert_to_webp_blocking(
         .arg(input)
         .arg("-an")
         .arg("-vf")
-        .arg(&filter)
-        .args(["-c:v", "libwebp_anim"])
-        .args(["-loop", loop_count])
+        .arg(&filter);
+
+    if static_input {
+        command.args(["-c:v", "libwebp"]).arg("-frames:v").arg("1");
+    } else {
+        command
+            .args(["-c:v", "libwebp_anim"])
+            .args(["-loop", loop_count]);
+    }
+
+    command
         .args(["-lossless", lossless])
         .arg("-compression_level")
         .arg(compression_level.to_string())
@@ -280,6 +323,7 @@ fn media_info(input_path: String) -> Result<MediaInfo, String> {
             .and_then(|value| value.as_str())
             .and_then(|value| value.parse::<f64>().ok())
             .unwrap_or_default(),
+        is_static_image: is_static_image_path(&input),
     })
 }
 
@@ -296,14 +340,35 @@ fn desktop_dir() -> Result<String, String> {
     }
 }
 
-fn validate_common_options(width: u32, height: u32, fps: u32) -> Result<(), String> {
+fn validate_common_options(
+    width: u32,
+    height: u32,
+    fps: u32,
+    static_input: bool,
+) -> Result<(), String> {
     if width == 0 || height == 0 {
         return Err("宽高必须大于 0".into());
     }
-    if !(10..=30).contains(&fps) {
+    if !static_input && !(10..=30).contains(&fps) {
         return Err("FPS 需要在 10 到 30 之间".into());
     }
     Ok(())
+}
+
+fn is_static_image_path(input: &Path) -> bool {
+    matches!(
+        input.extension().and_then(|extension| extension.to_str()),
+        Some(extension)
+            if extension.eq_ignore_ascii_case("png")
+                || extension.eq_ignore_ascii_case("jpg")
+                || extension.eq_ignore_ascii_case("jpeg")
+                || extension.eq_ignore_ascii_case("bmp")
+                || extension.eq_ignore_ascii_case("tif")
+                || extension.eq_ignore_ascii_case("tiff")
+                || extension.eq_ignore_ascii_case("heic")
+                || extension.eq_ignore_ascii_case("heif")
+                || extension.eq_ignore_ascii_case("avif")
+    )
 }
 
 fn output_result(output: PathBuf, label: &str) -> Result<ConvertResult, String> {
@@ -553,6 +618,21 @@ mod tests {
         assert_eq!(normalize_webp_preset("photo").unwrap(), "photo");
         assert_eq!(normalize_webp_preset("icon").unwrap(), "icon");
         assert!(normalize_webp_preset("drawing").is_err());
+    }
+
+    #[test]
+    fn static_image_detection_handles_common_extensions() {
+        assert!(is_static_image_path(Path::new("avatar.png")));
+        assert!(is_static_image_path(Path::new("avatar.JPEG")));
+        assert!(is_static_image_path(Path::new("avatar.tiff")));
+        assert!(!is_static_image_path(Path::new("avatar.gif")));
+        assert!(!is_static_image_path(Path::new("avatar.mp4")));
+    }
+
+    #[test]
+    fn static_inputs_do_not_require_animation_fps() {
+        assert!(validate_common_options(144, 144, 0, true).is_ok());
+        assert!(validate_common_options(144, 144, 0, false).is_err());
     }
 
     #[test]

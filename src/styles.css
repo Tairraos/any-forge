@@ -257,6 +257,11 @@ label span {
   font-weight: 700;
 }
 
+label:has(input:disabled) > span,
+label:has(select:disabled) > span {
+  color: #8a8f98;
+}
+
 .size-row {
   display: grid;
   grid-template-columns: 45fr 20fr 20fr 15fr;
@@ -355,7 +360,7 @@ button:hover {
 button:disabled,
 .is-busy button {
   opacity: 0.55;
-  cursor: wait;
+  cursor: default;
 }
 
 .convert-button {

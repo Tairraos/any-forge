@@ -90,6 +90,7 @@ let outputFormat = outputFormats.includes(saved.outputFormat) ? saved.outputForm
 let previewKind = "";
 let previewInfo = null;
 let pendingMediaInfo = null;
+let pendingStaticInput = false;
 
 const $ = (selector) => document.querySelector(selector);
 const presetEl = $("#size-preset");
@@ -129,7 +130,7 @@ function snapToFive(value) {
 }
 
 function normalizeSizeInput(input, fallback) {
-    input.value = String(snapToFive(readNumber(input, fallback)));
+    input.value = String(Math.max(1, Math.round(readNumber(input, fallback))));
 }
 
 function normalizeIntegerInput(input, fallback, min, max) {
@@ -159,6 +160,7 @@ function normalizeMediaInfo(info) {
         width: Number.isFinite(info?.width) && info.width > 0 ? Math.round(info.width) : null,
         height: Number.isFinite(info?.height) && info.height > 0 ? Math.round(info.height) : null,
         fps: Number.isFinite(info?.fps) && info.fps > 0 ? info.fps : null,
+        isStaticImage: Boolean(info?.isStaticImage),
     };
 }
 
@@ -181,6 +183,10 @@ function fileKind(path) {
 
 function shouldUseImagePreview(kind) {
     return ["gif", "webp", "png", "jpg", "bmp", "avif"].includes(kind);
+}
+
+function isStaticImageKind(kind) {
+    return ["png", "jpg", "bmp", "tif", "tiff", "heic", "heif", "avif"].includes(kind);
 }
 
 function saveSettings() {
@@ -239,11 +245,11 @@ function updateLocateButton() {
 }
 
 function currentWidth() {
-    return snapToFive(readNumber(widthEl, 144));
+    return Math.max(1, Math.round(readNumber(widthEl, 144)));
 }
 
 function currentHeight() {
-    return snapToFive(readNumber(heightEl, 144));
+    return Math.max(1, Math.round(readNumber(heightEl, 144)));
 }
 
 function currentFps() {
@@ -268,10 +274,12 @@ function outputLabel() {
 
 function updateOutputFormatUi() {
     const isWebp = outputFormat === "webp";
+    const staticInput = pendingStaticInput;
     formatToggleEl.dataset.format = outputFormat;
     formatLabelEl.textContent = outputLabel();
     webpOptionsEl.classList.toggle("is-disabled", !isWebp);
-    loopEl.disabled = !isWebp;
+    fpsEl.disabled = staticInput;
+    loopEl.disabled = !isWebp || staticInput;
     lossyEl.disabled = !isWebp;
     compressionLevelEl.disabled = !isWebp;
     webpPresetEl.disabled = !isWebp;
@@ -286,7 +294,10 @@ function updateBadge(kind, info = previewInfo) {
     previewKind = kind;
     previewBadgeEl.hidden = false;
     previewBadgeEl.dataset.kind = kind;
-    previewBadgeEl.textContent = `${kind.toUpperCase()}, ${formatBadgeSize(info)}, FPS ${formatBadgeFps(info)}`;
+    const parts = [kind.toUpperCase(), formatBadgeSize(info)];
+    if (!info?.isStaticImage)
+        parts.push(`FPS ${formatBadgeFps(info)}`);
+    previewBadgeEl.textContent = parts.join(", ");
 }
 
 function renderPreview(path, kind) {
@@ -318,7 +329,7 @@ function markParamsChanged() {
     if (!pendingPath)
         return;
     renderPreview(pendingPath, pendingKind);
-    previewInfo = pendingMediaInfo;
+    previewInfo = pendingMediaInfo || { isStaticImage: pendingStaticInput };
     updateBadge(pendingKind);
     resetOutputState();
 }
@@ -327,12 +338,14 @@ async function loadPreview(path) {
     const kind = fileKind(path) || "file";
     pendingPath = path;
     pendingKind = kind;
+    pendingStaticInput = isStaticImageKind(kind);
     pendingMediaInfo = null;
-    previewInfo = null;
+    previewInfo = { isStaticImage: pendingStaticInput };
     resetOutputState();
     fileNameEl.textContent = path.split(/[\\/]/).pop() || kind.toUpperCase();
     renderPreview(path, kind);
     updateBadge(kind);
+    updateOutputFormatUi();
     setStatus("读取文件信息...", "idle");
     updateConvertButton();
     try {
@@ -340,9 +353,16 @@ async function loadPreview(path) {
         if (pendingPath !== path)
             return;
         pendingMediaInfo = normalizeMediaInfo(info);
+        pendingStaticInput = pendingMediaInfo.isStaticImage;
         previewInfo = pendingMediaInfo;
         updateBadge(kind);
-        setStatus(`${kind.toUpperCase()} 文件 原始宽 ${info.width} 高 ${info.height} FPS${Number(info.fps.toFixed(2))} 时长 ${formatDuration(info.duration)}`, "idle");
+        updateOutputFormatUi();
+        if (pendingStaticInput) {
+            setStatus(`${kind.toUpperCase()} 文件 原始宽 ${info.width} 高 ${info.height}`, "idle");
+        }
+        else {
+            setStatus(`${kind.toUpperCase()} 文件 原始宽 ${info.width} 高 ${info.height} FPS${Number(info.fps.toFixed(2))} 时长 ${formatDuration(info.duration)}`, "idle");
+        }
     }
     catch {
         setStatus("已载入，点击转换", "idle");
@@ -386,7 +406,8 @@ async function convert() {
         previewInfo = normalizeMediaInfo({
             width: outputWidth,
             height: outputHeight,
-            fps: currentFps(),
+            fps: pendingStaticInput ? null : currentFps(),
+            isStaticImage: pendingStaticInput,
         });
         renderPreview(result.outputPath, outputFormat);
         updateBadge(outputFormat);
@@ -478,9 +499,14 @@ async function boot() {
     outputDirEl.addEventListener("input", saveSettings);
     chooseFolderEl.addEventListener("click", chooseFolder);
     convertButtonEl.addEventListener("click", convert);
+    convertButtonEl.addEventListener("animationend", () => {
+        convertButtonEl.classList.remove("is-converting");
+    });
     locateButtonEl.addEventListener("click", locateOutput);
     formatToggleEl.addEventListener("click", toggleOutputFormat);
     fpsEl.addEventListener("input", () => {
+        if (fpsEl.disabled)
+            return;
         normalizeIntegerInput(fpsEl, 12, 10, 30);
         saveSettings();
         resetOutputState();
