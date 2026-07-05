@@ -46,9 +46,12 @@ select {
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+  align-items: center;
+  justify-content: center;
 }
 
 .hero-row {
+  width: 450px;
   display: grid;
   grid-template-columns: 300px 130px;
   gap: 20px;
@@ -233,6 +236,7 @@ h2 {
 }
 
 .controls {
+  width: 450px;
   display: grid;
   gap: 10px;
 }
@@ -246,6 +250,7 @@ label span {
   color: #4b5563;
   font-size: 12px;
   font-weight: 700;
+  text-indent: 5px;
 }
 
 label:has(input:disabled) > span,
@@ -273,7 +278,7 @@ select {
   height: 32px;
   border: 1px solid #cfd5df;
   border-radius: 5px;
-  padding: 0 9px;
+  padding: 0 4px 0 10px;
   color: #16181d;
   background: #ffffff;
   outline: none;
@@ -304,19 +309,10 @@ select:focus {
   min-width: 0;
 }
 
-.checkbox-box {
-  width: 100%;
-  height: 32px;
-  border: 1px solid #cfd5df;
-  border-radius: 5px;
-  background: #ffffff;
-  display: grid;
-  place-items: center;
-}
-
-.checkbox-box input {
+.checkbox-field input {
   width: 16px;
   height: 16px;
+  margin: 8px 10px;
   padding: 0;
   accent-color: #1687ff;
   cursor: pointer;
@@ -337,7 +333,7 @@ button {
   height: 32px;
   border: 0;
   border-radius: 5px;
-  color: #ffffff;
+  color: #333;
   background: #16181d;
   cursor: pointer;
   display: grid;
@@ -388,7 +384,7 @@ button:disabled,
 }
 
 .folder-field button {
-  background: #3f434a;
+  background: #ccc;
   box-shadow: 0 3px 8px rgba(22, 24, 29, 0.22);
   transition:
     box-shadow 120ms ease,
