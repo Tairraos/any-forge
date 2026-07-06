@@ -1,11 +1,14 @@
 {
   "name": "any-forge",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
+  "packageManager": "pnpm@11.9.0",
   "type": "module",
   "scripts": {
     "dev": "pnpm build && python3 -m http.server 1420 -d dist",
     "build": "node scripts/build.mjs",
+    "frontend:build": "node scripts/build.mjs",
+    "release": "node scripts/release.mjs",
     "preview": "python3 -m http.server 1420 -d dist",
     "tauri": "tauri"
   },

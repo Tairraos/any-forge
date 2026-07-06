@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-1.0.2-1687FF?style=flat-square">
+  <img alt="version" src="https://img.shields.io/badge/version-1.0.3-1687FF?style=flat-square">
   <img alt="platform macOS" src="https://img.shields.io/badge/platform-macOS-111827?style=flat-square&logo=apple&logoColor=white">
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white">
   <img alt="ffmpeg" src="https://img.shields.io/badge/ffmpeg-required-22C55E?style=flat-square">
@@ -99,11 +99,21 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-打包后的文件会生成在 Tauri 的 bundle 目录。项目维护时会把可分发的 `.app` 和 `.dmg` 放到 git 忽略的 `release/` 目录中，并在文件名里带上版本号。
+生成发布包：
+
+```bash
+pnpm run release 1.0.3
+```
+
+`release` 脚本会按顺序同步版本号、重新生成 Tauri 图标、执行 `pnpm tauri build`、把 `.app` 和 `.dmg` 重命名后放进 `release/`，最后清理 `dist`、`src-tauri/target` 等过程目录。不带版本号时，会跳过版本号修改，直接用当前版本生成发布包：
+
+```bash
+pnpm run release
+```
 
 ## 版本号
 
-发布或打包前，请保持这些文件里的版本一致：
+手动改版本时，请保持这些文件里的版本一致：
 
 - `package.json`
 - `src-tauri/Cargo.toml`
