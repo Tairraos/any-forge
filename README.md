@@ -31,8 +31,8 @@ AnyForge 是一个本机媒体转换小工具。把 MP4、GIF、WebP、PNG、JPG
 ## 界面
 
 <p align="center">
-  <img src="docs/screenshot-ready.png" alt="AnyForge 主界面截图占位" width="480" />
-  <img src="docs/screenshot-main.png" alt="AnyForge 主界面截图占位" width="480" />
+  <img src="docs/screenshot-ready.png" alt="AnyForge 启动界面" width="360" />
+  <img src="docs/screenshot-main.png" alt="AnyForge 工作界面" width="360" />
 </p>
 
 ## 使用
