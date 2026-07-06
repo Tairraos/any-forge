@@ -51,7 +51,7 @@ AnyForge 是一个本机媒体转换小工具。把 MP4、GIF、WebP、PNG、JPG
 
 ## 环境要求
 
-- macOS （Tarui 支持，但楼主没有 Windows / Linux 机器楼主无法编译其它发行包）；
+- macOS （Tauri 支持，但楼主没有 Windows / Linux 机器楼主无法编译其它发行包）；
 - 本机需预装全局可访问的 `ffmpeg`（如果为便携版，同时需要 `ffprobe`）。
 
 用以下命令检查环境是否满足要求：
