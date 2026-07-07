@@ -163,7 +163,9 @@ function assertExpectedOutputs(outputs) {
 function cleanIcons() {
   const iconDir = join(root, "src-tauri", "icons");
   for (const entry of readdirSync(iconDir)) {
-    if (entry !== "app-icon.png") rmSync(join(iconDir, entry), { recursive: true, force: true });
+    if (!["app-icon.png", "icon.png"].includes(entry)) {
+      rmSync(join(iconDir, entry), { recursive: true, force: true });
+    }
   }
 }
 

@@ -15,6 +15,7 @@ src-tauri/target
 src-tauri/icons/*
 !src-tauri/icons/
 !src-tauri/icons/app-icon.png
+!src-tauri/icons/icon.png
 release
 *.local
 
