@@ -12,6 +12,9 @@ dist
 dist-ssr
 src-tauri/gen
 src-tauri/target
+src-tauri/icons/*
+!src-tauri/icons/
+!src-tauri/icons/app-icon.png
 release
 *.local
 

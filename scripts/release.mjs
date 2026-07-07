@@ -1,94 +1,131 @@
+import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   renameSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { basename, extname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { currentVersion, patchVersion, readJson, root } from "./patch-version.mjs";
 
-const root = process.cwd();
-const requestedVersion = process.argv[2]?.trim();
+process.chdir(root);
 
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+const requestedVersion = process.argv.slice(2).find((arg) => arg !== "--")?.trim();
+if (requestedVersion) patchVersion(requestedVersion);
+
+const version = currentVersion();
+const packageJson = readJson("package.json");
+const tauriConfig = readJson("src-tauri/tauri.conf.json");
+const productName = tauriConfig.productName;
+const bundleDir = join(root, "src-tauri", "target", "release", "bundle");
+const releaseDir = join(root, "release");
+
+try {
+  rmSync(bundleDir, { recursive: true, force: true });
+  cleanIcons();
+  run("pnpm", ["tauri", "icon", "src-tauri/icons/app-icon.png"]);
+
+  try {
+    run("pnpm", ["tauri", "build"]);
+  } catch (error) {
+    if (!hasBuildOutput()) throw error;
+    console.warn("tauri build 没有完整结束，继续整理已生成的发布产物。");
+  }
+
+  if (process.platform === "darwin" && macAppPath() && !findFiles(join(bundleDir, "dmg"), ".dmg").length) {
+    createSimpleDmg();
+  }
+
+  const outputs = collectReleaseFiles();
+  assertExpectedOutputs(outputs);
+  console.log("\n发布包已生成：");
+  for (const output of outputs) console.log(output);
+} finally {
+  cleanProcessFiles();
 }
 
-function writeJson(path, data) {
-  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-function run(command, args) {
+function run(command, args, options = {}) {
   console.log(`\n$ ${[command, ...args].join(" ")}`);
-  const result = spawnSync(command, args, {
-    cwd: root,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  const result = spawnSync(command, args, { cwd: options.cwd || root, stdio: "inherit" });
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed`);
+}
+
+function archName() {
+  if (process.arch === "arm64") return "aarch64";
+  if (process.arch === "x64") return "x64";
+  return process.arch;
+}
+
+function hasBuildOutput() {
+  return Boolean(macAppPath() || windowsExecutablePath());
+}
+
+function macAppPath() {
+  const path = join(bundleDir, "macos", `${productName}.app`);
+  return existsSync(path) ? path : "";
+}
+
+function windowsExecutablePath() {
+  const path = join(root, "src-tauri", "target", "release", `${packageJson.name}.exe`);
+  return existsSync(path) ? path : "";
+}
+
+function createSimpleDmg() {
+  const appPath = macAppPath();
+  if (!appPath) return;
+  const dmgDir = join(bundleDir, "dmg");
+  const dmgPath = join(dmgDir, `${productName}_${version}_${archName()}.dmg`);
+  const stagingDir = mkdtempSync(join(tmpdir(), `${packageJson.name}-dmg-`));
+
+  try {
+    mkdirSync(dmgDir, { recursive: true });
+    cpSync(appPath, join(stagingDir, `${productName}.app`), { recursive: true });
+    symlinkSync("/Applications", join(stagingDir, "Applications"));
+    run("hdiutil", ["makehybrid", "-hfs", "-hfs-volume-name", productName, "-o", dmgPath, stagingDir]);
+  } finally {
+    rmSync(stagingDir, { recursive: true, force: true });
   }
 }
 
-function requireSemver(version) {
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
-    throw new Error(`版本号格式不正确: ${version}`);
+function collectReleaseFiles() {
+  mkdirSync(releaseDir, { recursive: true });
+  const outputs = [];
+
+  const appPath = macAppPath();
+  if (appPath) outputs.push(movePath(appPath, releaseName(".app")));
+
+  const winExe = windowsExecutablePath();
+  if (winExe) outputs.push(movePath(winExe, releaseName(".exe")));
+
+  for (const dmgFile of findFiles(join(bundleDir, "dmg"), ".dmg")) {
+    if (!basename(dmgFile).startsWith("rw.")) outputs.push(movePath(dmgFile, releaseName(".dmg")));
   }
+  for (const installer of [
+    ...findFiles(join(bundleDir, "nsis"), ".exe"),
+    ...findFiles(join(bundleDir, "msi"), ".msi"),
+  ]) {
+    outputs.push(movePath(installer, releaseName(extname(installer), "setup")));
+  }
+  for (const linuxPackage of [
+    ...findFiles(join(bundleDir, "appimage"), ".AppImage"),
+    ...findFiles(join(bundleDir, "deb"), ".deb"),
+    ...findFiles(join(bundleDir, "rpm"), ".rpm"),
+  ]) {
+    outputs.push(movePath(linuxPackage, releaseName(extname(linuxPackage))));
+  }
+
+  return outputs;
 }
 
-function replaceFile(path, replacer) {
-  const before = readFileSync(path, "utf8");
-  const after = replacer(before);
-  if (after !== before) {
-    writeFileSync(path, after);
-  }
-}
-
-function updateVersion(version) {
-  requireSemver(version);
-
-  const packageJsonPath = "package.json";
-  const packageJson = readJson(packageJsonPath);
-  packageJson.version = version;
-  writeJson(packageJsonPath, packageJson);
-
-  replaceFile("src-tauri/Cargo.toml", (content) =>
-    content.replace(/^version = ".*"$/m, `version = "${version}"`),
-  );
-
-  const tauriConfigPath = "src-tauri/tauri.conf.json";
-  const tauriConfig = readJson(tauriConfigPath);
-  tauriConfig.version = version;
-  for (const windowConfig of tauriConfig.app?.windows ?? []) {
-    if (windowConfig.title) {
-      windowConfig.title = `${tauriConfig.productName} ${version}`;
-    }
-  }
-  writeJson(tauriConfigPath, tauriConfig);
-
-  replaceFile("index.html", (content) =>
-    content.replace(/<title>.*<\/title>/, `<title>${tauriConfig.productName} ${version}</title>`),
-  );
-
-  if (existsSync("README.md")) {
-    replaceFile("README.md", (content) =>
-      content.replace(/badge\/version-[^-]+-/g, `badge/version-${version}-`),
-    );
-  }
-}
-
-function currentVersion() {
-  return readJson("src-tauri/tauri.conf.json").version;
-}
-
-function productName() {
-  return readJson("src-tauri/tauri.conf.json").productName;
+function releaseName(extension, suffix = "") {
+  const parts = [productName, version, archName()];
+  if (suffix) parts.push(suffix);
+  return join(releaseDir, `${parts.join("-")}${extension}`);
 }
 
 function movePath(from, to) {
@@ -96,123 +133,43 @@ function movePath(from, to) {
   try {
     renameSync(from, to);
   } catch (error) {
-    if (error.code !== "EXDEV") {
-      throw error;
-    }
+    if (error.code !== "EXDEV") throw error;
     cpSync(from, to, { recursive: true });
     rmSync(from, { recursive: true, force: true });
   }
+  return to;
 }
 
-function releaseDmgName(dmgFile, name, version) {
-  const escapedVersion = version.replaceAll(".", "\\.");
-  const match = basename(dmgFile).match(new RegExp(`_${escapedVersion}_(.+)\\.dmg$`));
-  const arch = match?.[1];
-  return arch ? `${name}-${version}-${arch}.dmg` : `${name}-${version}.dmg`;
+function findFiles(dir, extension) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = join(dir, entry.name);
+      return entry.isDirectory() ? findFiles(path, extension) : [path];
+    })
+    .filter((path) => path.endsWith(extension))
+    .sort();
 }
 
-function archName() {
-  if (process.arch === "arm64") {
-    return "aarch64";
+function assertExpectedOutputs(outputs) {
+  if (process.platform === "darwin" && (!outputs.some((file) => file.endsWith(".app")) || !outputs.some((file) => file.endsWith(".dmg")))) {
+    throw new Error("macOS 发布包必须包含 .app 和 .dmg");
   }
-  if (process.arch === "x64") {
-    return "x64";
-  }
-  return process.arch;
-}
-
-function createSimpleDmg(version) {
-  const name = productName();
-  const appPath = join("src-tauri", "target", "release", "bundle", "macos", `${name}.app`);
-  const dmgDir = join("src-tauri", "target", "release", "bundle", "dmg");
-  const dmgPath = join(dmgDir, `${name}_${version}_${archName()}.dmg`);
-  const stagingDir = mkdtempSync(join(tmpdir(), "any-forge-dmg-"));
-
-  try {
-    mkdirSync(dmgDir, { recursive: true });
-    for (const file of readdirSync(dmgDir)) {
-      if (file.startsWith("rw.") || file === basename(dmgPath)) {
-        rmSync(join(dmgDir, file), { force: true });
-      }
-    }
-    cpSync(appPath, join(stagingDir, `${name}.app`), { recursive: true });
-    symlinkSync("/Applications", join(stagingDir, "Applications"));
-    run("hdiutil", [
-      "makehybrid",
-      "-hfs",
-      "-hfs-volume-name",
-      name,
-      "-o",
-      dmgPath,
-      stagingDir,
-    ]);
-  } finally {
-    rmSync(stagingDir, { recursive: true, force: true });
+  if (process.platform === "win32" && (!outputs.some((file) => file.endsWith(".exe") && !file.includes("-setup.")) || !outputs.some((file) => file.includes("-setup.")))) {
+    throw new Error("Windows 发布包必须包含可执行文件和安装文件");
   }
 }
 
-function collectReleaseFiles(version) {
-  const name = productName();
-  const bundleDir = join("src-tauri", "target", "release", "bundle");
-  const appPath = join(bundleDir, "macos", `${name}.app`);
-  const dmgDir = join(bundleDir, "dmg");
-
-  if (!existsSync(appPath)) {
-    throw new Error(`找不到 App 产物: ${appPath}`);
-  }
-  if (!existsSync(dmgDir)) {
-    throw new Error(`找不到 DMG 目录: ${dmgDir}`);
-  }
-
-  const dmgFiles = readdirSync(dmgDir)
-    .filter((file) => file.endsWith(".dmg") && !file.startsWith("rw."))
-    .map((file) => join(dmgDir, file));
-  if (dmgFiles.length === 0) {
-    throw new Error(`找不到 DMG 产物: ${dmgDir}`);
-  }
-
-  rmSync("release", { recursive: true, force: true });
-  mkdirSync("release", { recursive: true });
-
-  const releaseApp = join("release", `${name}-${version}.app`);
-  movePath(appPath, releaseApp);
-  console.log(`\nApp: ${releaseApp}`);
-
-  for (const dmgFile of dmgFiles) {
-    const releaseDmg = join("release", releaseDmgName(dmgFile, name, version));
-    movePath(dmgFile, releaseDmg);
-    console.log(`DMG: ${releaseDmg}`);
+function cleanIcons() {
+  const iconDir = join(root, "src-tauri", "icons");
+  for (const entry of readdirSync(iconDir)) {
+    if (entry !== "app-icon.png") rmSync(join(iconDir, entry), { recursive: true, force: true });
   }
 }
 
 function cleanProcessFiles() {
-  for (const path of [
-    "dist",
-    join("src-tauri", "target"),
-    join("src-tauri", "gen"),
-    join("src-tauri", "icons", "64x64.png"),
-    join("src-tauri", "icons", "android"),
-    join("src-tauri", "icons", "ios"),
-    ".DS_Store",
-    join("src", ".DS_Store"),
-    join("src", "assets", ".DS_Store"),
-  ]) {
-    rmSync(path, { recursive: true, force: true });
-  }
+  rmSync(join(root, "dist"), { recursive: true, force: true });
+  rmSync(join(root, "src-tauri", "target"), { recursive: true, force: true });
+  rmSync(join(root, "src-tauri", "gen"), { recursive: true, force: true });
+  cleanIcons();
 }
-
-if (requestedVersion) {
-  console.log(`更新版本号到 ${requestedVersion}`);
-  updateVersion(requestedVersion);
-}
-
-const version = currentVersion();
-console.log(`准备发布 AnyForge ${version}`);
-
-run("pnpm", ["tauri", "icon", "src-tauri/icons/app-icon.png"]);
-run("pnpm", ["tauri", "build", "--bundles", "app"]);
-createSimpleDmg(version);
-collectReleaseFiles(version);
-cleanProcessFiles();
-
-console.log("\n发布包已生成。");

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-1.0.3-1687FF?style=flat-square">
+  <img alt="version" src="https://img.shields.io/badge/version-1.0.4-1687FF?style=flat-square">
   <img alt="platform macOS" src="https://img.shields.io/badge/platform-macOS-111827?style=flat-square&logo=apple&logoColor=white">
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white">
   <img alt="ffmpeg" src="https://img.shields.io/badge/ffmpeg-required-22C55E?style=flat-square">
