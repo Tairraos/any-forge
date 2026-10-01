@@ -128,3 +128,6 @@ jobs:
           while IFS= read -r file; do
             gh release upload "$GITHUB_REF_NAME" "$file" --clobber
           done < files.txt
+          # 删除过 tag 的关联 Release 会被 GitHub 转成 draft（对未登录用户不可见）；
+          # 资产传完后再发布，避免构建期间暴露空 Release
+          gh release edit "$GITHUB_REF_NAME" --draft=false
