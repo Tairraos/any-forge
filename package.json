@@ -8,6 +8,9 @@
     "dev": "pnpm build && python3 -m http.server 1420 -d dist",
     "build": "node scripts/build.mjs",
     "frontend:build": "node scripts/build.mjs",
+    "icons": "tauri icon src-tauri/icons/app-icon.png",
+    "check": "node --check src/main.js && node --check scripts/build.mjs && node --check scripts/patch-version.mjs && node --check scripts/release.mjs && pnpm build",
+    "check:native": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
     "release": "node scripts/release.mjs",
     "preview": "python3 -m http.server 1420 -d dist",
     "tauri": "tauri"

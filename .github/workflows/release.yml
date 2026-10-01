@@ -1,0 +1,129 @@
+name: Release
+# 触发：推送 v 开头的 tag（如 v1.0.4）→ 四平台构建并自动发布 GitHub Release。
+# tag 里的版本必须与 package.json / tauri.conf.json / Cargo.toml 一致，否则流程失败。
+#
+# 构建与上传拆成独立步骤：构建失败时把日志尾部写成 check-run 注解，
+# 没有仓库管理员权限（无法下载原始日志）时也能看到真实报错。
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tag 版本与三处配置一致
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$pkg" != "$tag" ] || [ "$conf" != "$tag" ] || [ "$cargo" != "$tag" ]; then
+            echo "tag 是 v$tag，但 package.json=$pkg / tauri.conf.json=$conf / Cargo.toml=$cargo；请把三处版本号改一致后重新打 tag。"
+            exit 1
+          fi
+      - name: 预建 Release（已存在则跳过，保留既有说明文字）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="安装包未签名：macOS 首次打开请右键选择「打开」，Windows 如遇 SmartScreen 提示请选择「仍要运行」。
+
+          转换功能依赖系统已安装的 ffmpeg（会自动探测 PATH 和常见安装位置）。"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" \
+              --title "AnyForge $GITHUB_REF_NAME" \
+              --notes "$NOTES"
+
+  publish:
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust-targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            rust-targets: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - platform: windows-latest
+            rust-targets: ""
+            args: ""
+          - platform: ubuntu-22.04
+            rust-targets: ""
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: 安装 Linux 打包依赖
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      - run: pnpm install --frozen-lockfile
+      # 仓库只跟踪 app-icon.png（其余图标被 .gitignore 排除），构建前必须重新生成全套图标，
+      # 否则 tauri build 与 generate_context!（编译期内嵌默认图标）都会因缺文件失败
+      - run: pnpm icons
+      - name: 构建安装包
+        id: build
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm tauri build ${{ matrix.args }} 2>&1 | tee build.log
+      - name: 构建失败时把报错写进注解
+        if: failure() && steps.build.outcome == 'failure'
+        shell: bash
+        run: |
+          LOG=build.log
+          if [ -f "$LOG" ]; then
+            grep -nE "^error|error\[|error:|Error:|cannot |failed|not found|No such|失败|错误|Traceback" "$LOG" | tail -n 10 > errors.txt || true
+            [ -s errors.txt ] || tail -n 10 "$LOG" > errors.txt
+          else
+            echo "未生成 build.log（构建未开始或输出未捕获）" > errors.txt
+          fi
+          while IFS= read -r line; do echo "::error title=Build failure::$line"; done < errors.txt
+          { echo "### 构建失败：日志尾部"; echo '```'; tail -n 120 "$LOG" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          exit 1
+      - name: 上传安装包到 Release
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 产物路径随构建方式不同：无 --target 时在 target/release/bundle，
+          # 带 --target <triple> 时在 target/<triple>/release/bundle，统一用 -path 匹配。
+          find target -path '*/release/bundle/*' -type f \( \
+            -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o \
+            -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
+            -name '*.sig' -o -name '*.zip' \) -print > files.txt
+          # .app.tar.gz 只取 macOS 打包目录；deb 暂存目录里的 control/data.tar.gz 是中间产物，不能上传
+          find target -path '*/release/bundle/macos/*' -type f -name '*.tar.gz' -print >> files.txt
+          count=$(wc -l < files.txt | tr -d ' ')
+          echo "找到 $count 个安装包："
+          sed 's/^/  /' files.txt
+          if [ "$count" -eq 0 ]; then
+            echo "构建成功但没有找到安装包，检查 bundle.targets 配置。"
+            exit 1
+          fi
+          # 清掉历史误传的打包中间产物（已存在才删，失败不影响上传）
+          for stray in control.tar.gz data.tar.gz; do
+            gh release delete-asset "$GITHUB_REF_NAME" "$stray" --yes >/dev/null 2>&1 || true
+          done
+          while IFS= read -r file; do
+            gh release upload "$GITHUB_REF_NAME" "$file" --clobber
+          done < files.txt
