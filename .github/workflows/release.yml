@@ -105,14 +105,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 产物路径随构建方式不同：无 --target 时在 target/release/bundle，
-          # 带 --target <triple> 时在 target/<triple>/release/bundle，统一用 -path 匹配。
-          find target -path '*/release/bundle/*' -type f \( \
+          # 产物路径随构建方式不同：无 --target 时在 src-tauri/target/release/bundle，
+          # 带 --target <triple> 时在 src-tauri/target/<triple>/release/bundle，统一用 -path 匹配。
+          # （calcbook 模板用根目录 target 是因为其 .cargo/config.toml 把 target-dir 指到了仓库根）
+          find src-tauri/target -path '*/release/bundle/*' -type f \( \
             -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o \
             -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
             -name '*.sig' -o -name '*.zip' \) -print > files.txt
           # .app.tar.gz 只取 macOS 打包目录；deb 暂存目录里的 control/data.tar.gz 是中间产物，不能上传
-          find target -path '*/release/bundle/macos/*' -type f -name '*.tar.gz' -print >> files.txt
+          find src-tauri/target -path '*/release/bundle/macos/*' -type f -name '*.tar.gz' -print >> files.txt
           count=$(wc -l < files.txt | tr -d ' ')
           echo "找到 $count 个安装包："
           sed 's/^/  /' files.txt
