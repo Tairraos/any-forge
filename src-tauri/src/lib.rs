@@ -29,6 +29,8 @@ struct MediaInfo {
     is_static_image: bool,
 }
 
+// Tauri command 直接映射 UI 上的全部转换选项，参数多是接口本身决定的
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn convert_file(
     input_path: String,
@@ -62,6 +64,7 @@ async fn convert_file(
     .map_err(|error| format!("转换任务失败: {error}"))?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn convert_file_blocking(
     input_path: String,
     output_format: String,
@@ -111,7 +114,13 @@ fn convert_to_gif_blocking(
     fps: u32,
     static_input: bool,
 ) -> Result<ConvertResult, String> {
-    let output = next_output_path(input, output_dir.as_deref(), width, height, OutputFormat::Gif)?;
+    let output = next_output_path(
+        input,
+        output_dir.as_deref(),
+        width,
+        height,
+        OutputFormat::Gif,
+    )?;
     let ffmpeg = ffmpeg_bin();
 
     if static_input {
@@ -182,6 +191,7 @@ fn convert_to_gif_blocking(
     output_result(output, "GIF")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn convert_to_webp_blocking(
     input: &Path,
     width: u32,
@@ -203,7 +213,13 @@ fn convert_to_webp_blocking(
     }
     let preset = normalize_webp_preset(&preset)?;
 
-    let output = next_output_path(input, output_dir.as_deref(), width, height, OutputFormat::Webp)?;
+    let output = next_output_path(
+        input,
+        output_dir.as_deref(),
+        width,
+        height,
+        OutputFormat::Webp,
+    )?;
     let ffmpeg = ffmpeg_bin();
     let filter = if static_input {
         format!("scale={width}:{height}:flags=lanczos")
@@ -259,12 +275,21 @@ fn reveal_in_finder(output_path: String) -> Result<(), String> {
     if !path.is_file() {
         return Err("找不到刚生成的文件".into());
     }
-    Command::new("open")
-        .arg("-R")
-        .arg(path)
-        .stdin(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("无法打开 Finder: {error}"))?;
+    let open_result = if cfg!(target_os = "macos") {
+        Command::new("open").arg("-R").arg(&path).spawn()
+    } else if cfg!(target_os = "windows") {
+        Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .spawn()
+    } else {
+        // xdg-open 无法高亮单个文件，只能打开所在目录
+        Command::new("xdg-open")
+            .arg(path.parent().unwrap_or(&path))
+            .spawn()
+    };
+    open_result
+        .map(|_| ())
+        .map_err(|error| format!("无法打开文件管理器: {error}"))?;
     Ok(())
 }
 
