@@ -354,15 +354,12 @@ fn media_info(input_path: String) -> Result<MediaInfo, String> {
 
 #[tauri::command]
 fn desktop_dir() -> Result<String, String> {
-    let home = std::env::var_os("HOME").ok_or("找不到用户目录")?;
-    let desktop = PathBuf::from(home).join("Desktop");
-    if desktop.is_dir() {
-        Ok(desktop.to_string_lossy().into_owned())
-    } else {
-        std::env::current_dir()
-            .map(|path| path.to_string_lossy().into_owned())
-            .map_err(|error| format!("找不到默认保存目录: {error}"))
-    }
+    // Windows GUI 进程通常没有 HOME（只有 USERPROFILE）且桌面可能被重定向（如 OneDrive），
+    // Linux 桌面目录名可能被本地化；dirs 按平台正确解析这三种情况
+    let desktop = dirs::desktop_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("找不到用户目录")?;
+    Ok(desktop.to_string_lossy().into_owned())
 }
 
 fn validate_common_options(

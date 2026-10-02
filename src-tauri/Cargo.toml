@@ -1,6 +1,6 @@
 [package]
 name = "any-forge"
-version = "1.0.4"
+version = "1.0.5"
 description = "Small media to GIF/WebP converter"
 authors = ["xiaole"]
 edition = "2021"
@@ -22,3 +22,4 @@ tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-dialog = "2"
+dirs = "6"

@@ -463,7 +463,8 @@ async function boot() {
         desktopDir = await invoke("desktop_dir");
     }
     catch {
-        desktopDir = "/Users/xiaole/Desktop";
+        // 前端拼不出用户名对应的桌面路径；留空让 Rust 端把输出保存到输入文件同目录
+        desktopDir = "";
     }
     const savedPreset = presets.find((preset) => `${preset.width}x${preset.height}` === saved.preset);
     const initialPreset = savedPreset || presets[0];
